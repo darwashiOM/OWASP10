@@ -1,0 +1,55 @@
+name: ZAP Full Scan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  zap-full:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start app
+        run: |
+          npm start > app.log 2>&1 &
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000 >/dev/null; then
+              echo "App is up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "App failed to start"
+          cat app.log
+          exit 1
+
+      - name: Run ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.13.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: 'http://127.0.0.1:3000'
+          fail_action: false
+          allow_issue_writing: true
+          artifact_name: zap-full-report
+          issue_title: ZAP Full Scan Report
+
+      - name: Upload app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-log-full
+          path: app.log
